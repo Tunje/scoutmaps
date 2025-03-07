@@ -35,12 +35,34 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
   // Center the map and make it fill the container when it loads
   useEffect(() => {
     const centerAndFitMap = () => {
-      if (mapImageRef.current) {
-        // Reset position to center
-        setPosition({ x: 0, y: 0 });
+      if (mapImageRef.current && mapContentRef.current && mapWrapperRef.current) {
+        const mapContent = mapContentRef.current;
+        const mapImage = mapImageRef.current;
         
-        // Reset scale to 1 (default)
-        setScale(1);
+        // Wait a bit to ensure all elements are properly rendered
+        setTimeout(() => {
+          // Get the dimensions of the map content area and image
+          const contentRect = mapContent.getBoundingClientRect();
+          
+          // Account for the bottom controls and other UI elements
+          const bottomControlsHeight = 80;
+          const visibleHeight = contentRect.height - bottomControlsHeight;
+          
+          const imageWidth = mapImage.naturalWidth;
+          const imageHeight = mapImage.naturalHeight;
+          
+          // Calculate the position to center the map
+          // Move further to the left with an additional offset
+          const centerX = (contentRect.width - imageWidth) / 2 - 80;
+          // Move much higher with a larger offset
+          const centerY = (visibleHeight - imageHeight) / 2 - 250;
+          
+          // Set position to center the map
+          setPosition({ x: centerX, y: centerY });
+          
+          // Reset scale to 1 (default)
+          setScale(1);
+        }, 100); // Short delay to ensure measurements are accurate
       }
     };
 
