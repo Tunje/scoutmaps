@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import './App.css'
+import MapMaker from './components/MapMaker'
 
 function App() {
   const [mapSource, setMapSource] = useState<'base' | 'custom'>('base')
   const [customMapUrl, setCustomMapUrl] = useState<string | null>(null)
   const [savedMaps, setSavedMaps] = useState<string[]>([])
+  const [showEditor, setShowEditor] = useState(false)
 
   // Load saved maps from local storage on component mount
   useEffect(() => {
@@ -52,9 +54,21 @@ function App() {
     }
   }
 
+  const handleContinue = () => {
+    setShowEditor(true)
+  }
+
+  const handleBackToSelection = () => {
+    setShowEditor(false)
+  }
+
   // Get the current map URL based on selection
   const getCurrentMapUrl = () => {
     return mapSource === 'base' ? '/map/MAP.png' : customMapUrl || '';
+  }
+
+  if (showEditor) {
+    return <MapMaker mapUrl={getCurrentMapUrl()} onBack={handleBackToSelection} />;
   }
 
   return (
@@ -114,7 +128,7 @@ function App() {
                 <div className="continue-button-container">
                   <button 
                     className="btn btn-primary continue-button"
-                    onClick={() => {}}
+                    onClick={handleContinue}
                     disabled={mapSource === 'custom' && !customMapUrl}
                   >
                     Continue
@@ -131,6 +145,7 @@ function App() {
                   src="/map/MAP.png" 
                   alt="Base Map" 
                   className="map-image"
+                  style={{ maxWidth: '100%', maxHeight: '350px' }}
                 />
               </div>
             ) : customMapUrl ? (
@@ -139,6 +154,7 @@ function App() {
                   src={customMapUrl} 
                   alt="Custom Map" 
                   className="map-image"
+                  style={{ maxWidth: '100%', maxHeight: '350px' }}
                 />
               </div>
             ) : (
@@ -163,7 +179,7 @@ function App() {
           <div className="continue-button-container">
             <button 
               className="btn btn-primary continue-button"
-              onClick={() => {}}
+              onClick={handleContinue}
               disabled={mapSource === 'custom' && !customMapUrl}
             >
               Continue
