@@ -20,6 +20,11 @@ interface Tent {
   color: string;
 }
 
+interface Road {
+  points: {x: number, y: number}[],
+  color: string;
+}
+
 function MapMaker({ mapUrl, onBack }: MapMakerProps) {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
@@ -65,6 +70,12 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
 
   // State for highlighting tents from the map key
   const [highlightedTentIndex, setHighlightedTentIndex] = useState<number | null>(null);
+
+  // Road tool states
+  const [roads, setRoads] = useState<Road[]>([]);
+  const [currentRoad, setCurrentRoad] = useState<Road | null>(null);
+  const [isPlacingRoad, setIsPlacingRoad] = useState<boolean>(false);
+  const [roadColor, setRoadColor] = useState<string>('#000000');
 
   // Center the map and make it fill the container when it loads
   useEffect(() => {
@@ -186,7 +197,7 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
   };
 
   // Handle map click for setting scale points or placing tents
-  const handleMapClick = (e: React.MouseEvent) => {
+  const handleMapClickForScale = (e: React.MouseEvent) => {
     // Don't place points if we're dragging the map or a point
     if (isDraggingMap || draggingPointIndex !== null) return;
     
@@ -228,9 +239,11 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
         }, 0);
       }
     }
-    
+  };
+
+  const handleMapClickForTent = (e: React.MouseEvent) => {
     // Handle tent placement
-    else if (isPlacingTent && activeToolName === 'tent' && mapScale) {
+    if (isPlacingTent && activeToolName === 'tent' && mapScale) {
       const mapContent = mapContentRef.current;
       const mapWrapper = mapWrapperRef.current;
       if (!mapContent || !mapWrapper) return;
@@ -268,6 +281,77 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
       
       // Exit placement mode after placing a tent
       setIsPlacingTent(false);
+    }
+  };
+
+  const handleMapClickForRoad = (e: React.MouseEvent) => {
+    if (isPlacingRoad && currentRoad) {
+      const mapContent = mapContentRef.current;
+      const mapWrapper = mapWrapperRef.current;
+      if (!mapContent || !mapWrapper) return;
+
+      const wrapperRect = mapWrapper.getBoundingClientRect();
+      
+      // Calculate click position relative to the map wrapper
+      const clickX = (e.clientX - wrapperRect.left) / scale;
+      const clickY = (e.clientY - wrapperRect.top) / scale;
+
+      // Check if we're clicking near an existing point (for snapping)
+      const snapRadius = 10 / scale; // 10 pixels snap radius, adjusted for zoom
+      let snappedToExisting = false;
+
+      // First check current road points
+      if (currentRoad.points.length > 0) {
+        for (const point of currentRoad.points) {
+          const distance = Math.sqrt(Math.pow(point.x - clickX, 2) + Math.pow(point.y - clickY, 2));
+          if (distance < snapRadius) {
+            // Snap to existing point
+            setCurrentRoad(prev => ({
+              ...prev,
+              points: [...prev.points, { x: point.x, y: point.y }]
+            }));
+            snappedToExisting = true;
+            break;
+          }
+        }
+      }
+
+      // Then check other roads' points
+      if (!snappedToExisting) {
+        for (const road of roads) {
+          for (const point of road.points) {
+            const distance = Math.sqrt(Math.pow(point.x - clickX, 2) + Math.pow(point.y - clickY, 2));
+            if (distance < snapRadius) {
+              // Snap to existing point
+              setCurrentRoad(prev => ({
+                ...prev,
+                points: [...prev.points, { x: point.x, y: point.y }]
+              }));
+              snappedToExisting = true;
+              break;
+            }
+          }
+          if (snappedToExisting) break;
+        }
+      }
+
+      // If not snapped to any existing point, add new point
+      if (!snappedToExisting) {
+        setCurrentRoad(prev => ({
+          ...prev,
+          points: [...prev.points, { x: clickX, y: clickY }]
+        }));
+      }
+    }
+  };
+
+  const handleMapClick = (e: React.MouseEvent) => {
+    if (isSettingScale) {
+      handleMapClickForScale(e);
+    } else if (isPlacingTent) {
+      handleMapClickForTent(e);
+    } else if (isPlacingRoad) {
+      handleMapClickForRoad(e);
     }
   };
 
@@ -327,8 +411,8 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
 
   // Handle mouse down on map for dragging
   const handleMapMouseDown = (e: React.MouseEvent) => {
-    // Don't start map drag if we're in scale tool mode or already dragging a point
-    if (activeToolName === 'scale' || draggingPointIndex !== null) return;
+    // Don't start map drag if we're in scale tool mode, placing a tent, placing a road, or already dragging a point
+    if (activeToolName === 'scale' || isPlacingTent || isPlacingRoad || draggingPointIndex !== null) return;
     
     setIsDraggingMap(true);
     setDragStart({ x: e.clientX, y: e.clientY });
@@ -496,6 +580,27 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
   // Get highlight line position
   const highlightLinePosition = getHighlightLinePosition();
 
+  // Handle start road
+  const handleStartRoad = () => {
+    setIsPlacingRoad(true);
+    setCurrentRoad({ points: [], color: roadColor });
+  };
+
+  // Handle finish road
+  const handleFinishRoad = () => {
+    if (currentRoad) {
+      setRoads(prev => [...prev, currentRoad]);
+    }
+    setIsPlacingRoad(false);
+    setCurrentRoad(null);
+  };
+
+  // Handle cancel road
+  const handleCancelRoad = () => {
+    setIsPlacingRoad(false);
+    setCurrentRoad(null);
+  };
+
   return (
     <div className="map-maker-container">
       {/* Left sidebar - Map Key */}
@@ -642,6 +747,76 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
                 onClick={(e) => handleTentClick(index, e)}
               />
             ))}
+            
+            {/* Roads */}
+            {roads.map((road, index) => (
+              <svg 
+                key={`road-${index}`}
+                className="road"
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  pointerEvents: 'none',
+                  transformOrigin: '0 0'
+                }}
+              >
+                <polyline 
+                  points={road.points.map(point => `${point.x},${point.y}`).join(' ')}
+                  style={{
+                    fill: 'none',
+                    stroke: road.color,
+                    strokeWidth: '3px'
+                  }}
+                />
+                {road.points.map((point, pointIndex) => (
+                  <circle
+                    key={`road-${index}-point-${pointIndex}`}
+                    cx={point.x}
+                    cy={point.y}
+                    r={activeToolName === 'road' ? 4 : 1.5}
+                    fill={road.color}
+                  />
+                ))}
+              </svg>
+            ))}
+            
+            {/* Current road */}
+            {isPlacingRoad && currentRoad && (
+              <svg 
+                className="current-road"
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  pointerEvents: 'none',
+                  transformOrigin: '0 0'
+                }}
+              >
+                <polyline 
+                  points={currentRoad.points.map(point => `${point.x},${point.y}`).join(' ')}
+                  style={{
+                    fill: 'none',
+                    stroke: currentRoad.color,
+                    strokeWidth: '3px',
+                    strokeDasharray: '5,5'
+                  }}
+                />
+                {currentRoad.points.map((point, pointIndex) => (
+                  <circle
+                    key={`current-road-point-${pointIndex}`}
+                    cx={point.x}
+                    cy={point.y}
+                    r={4}
+                    fill={currentRoad.color}
+                  />
+                ))}
+              </svg>
+            )}
           </div>
         </div>
 
@@ -846,6 +1021,59 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
                 </button>
               </div>
             </div>
+          )}
+          
+          {/* Road Tool - Only enabled if scale is set */}
+          <div 
+            className={`tool-item ${activeToolName === 'road' ? 'active' : ''} ${!mapScale ? 'disabled' : ''}`}
+            onClick={() => handleToolSelect('road')}
+          >
+            Road
+          </div>
+          {activeToolName === 'road' && isToolExpanded && (
+            <div className="tool-options">
+              <div className="tool-option">
+                <label>Color:</label>
+                <input 
+                  type="color" 
+                  value={roadColor}
+                  onChange={(e) => setRoadColor(e.target.value)}
+                />
+              </div>
+              
+              <div className="tool-buttons">
+                {!isPlacingRoad ? (
+                  <button 
+                    className="tool-button"
+                    onClick={handleStartRoad}
+                  >
+                    Start Road
+                  </button>
+                ) : (
+                  <>
+                    <button 
+                      className="tool-button"
+                      onClick={handleFinishRoad}
+                    >
+                      Finish Road
+                    </button>
+                    <button 
+                      className="tool-button"
+                      onClick={handleCancelRoad}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                )}
+              </div>
+              
+              {isPlacingRoad && (
+                <div className="road-info">
+                  <p>Click on map to place road points</p>
+                  <p>Click on existing points to connect</p>
+                </div>
+              )}
+              </div>
           )}
         </div>
       </div>
