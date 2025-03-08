@@ -488,10 +488,10 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
     return {
       x1: keyRight - mapWrapperRect.left,
       y1: keyItemRect.top + keyItemRect.height / 2 - mapWrapperRect.top,
-      x2: tent.x + tent.width / 2,
-      y2: tent.y + tent.height / 2
+      x2: tent.x * scale + (tent.width * scale) / 2,
+      y2: tent.y * scale + (tent.height * scale) / 2
     };
-  }, [highlightedTentIndex, tents]);
+  }, [highlightedTentIndex, tents, scale]);
 
   // Get highlight line position
   const highlightLinePosition = getHighlightLinePosition();
@@ -622,19 +622,6 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
                       }
                 }
               />
-            )}
-            
-            {/* Highlight line */}
-            {highlightLinePosition && (
-              <svg className="highlight-line-container">
-                <line 
-                  className="highlight-line"
-                  x1={highlightLinePosition.x1}
-                  y1={highlightLinePosition.y1}
-                  x2={highlightLinePosition.x2}
-                  y2={highlightLinePosition.y2}
-                />
-              </svg>
             )}
             
             {/* Tents */}
