@@ -67,7 +67,6 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
   const [draggingPointIndex, setDraggingPointIndex] = useState<number | null>(null);
   const [isDraggingMap, setIsDraggingMap] = useState<boolean>(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  // const [startPosition, setStartPosition] = useState({ x: 0, y: 0 });
   const [isToolExpanded, setIsToolExpanded] = useState<boolean>(false);
 
   // Tent tool states
@@ -135,6 +134,9 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
   const [isScoutGroupModalOpen, setIsScoutGroupModalOpen] = useState<boolean>(false);
   const [currentScoutGroup, setCurrentScoutGroup] = useState<ScoutGroup | null>(null);
   const [editingScoutGroupId, setEditingScoutGroupId] = useState<number | null>(null);
+
+  // State for PDF export
+  const [isPdfGenerating, setIsPdfGenerating] = useState<boolean>(false);
 
   // Function to clear tents completely
   const clearAllTents = () => {
@@ -419,12 +421,12 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
       let snappedToExisting = false;
 
       // First check current road points
-      if (currentRoad.points.length > 0) {
+      if (currentRoad?.points?.length > 0) {
         for (const point of currentRoad.points) {
           const distance = Math.sqrt(Math.pow(point.x - clickX, 2) + Math.pow(point.y - clickY, 2));
           if (distance < snapRadius) {
             // Snap to existing point
-            setCurrentRoad(prev => ({
+            setCurrentRoad(prev => prev && ({
               ...prev,
               points: [...prev.points, { x: point.x, y: point.y }]
             }));
@@ -441,7 +443,7 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
             const distance = Math.sqrt(Math.pow(point.x - clickX, 2) + Math.pow(point.y - clickY, 2));
             if (distance < snapRadius) {
               // Snap to existing point
-              setCurrentRoad(prev => ({
+              setCurrentRoad(prev => prev && ({
                 ...prev,
                 points: [...prev.points, { x: point.x, y: point.y }]
               }));
@@ -455,7 +457,7 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
 
       // If not snapped to any existing point, add new point
       if (!snappedToExisting) {
-        setCurrentRoad(prev => ({
+        setCurrentRoad(prev => prev && ({
           ...prev,
           points: [...prev.points, { x: clickX, y: clickY }]
         }));
@@ -1079,16 +1081,6 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
     setTentColor(e.target.value);
   };
 
-  // Tent color options
-  const tentColorOptions = [
-    { value: "#4CAF50", label: "Green" },
-    { value: "#2196F3", label: "Blue" },
-    { value: "#F44336", label: "Red" },
-    { value: "#FFEB3B", label: "Yellow" },
-    { value: "#9C27B0", label: "Purple" },
-    { value: "#FF9800", label: "Orange" },
-  ];
-
   // Handle tent rotation
   const handleRotateLeft = () => {
     setTentRotation(prev => prev - 15);
@@ -1309,28 +1301,6 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
     );
   };
 
-  // Function to handle adding a point to a road
-  const handleAddRoadPoint = (e: React.MouseEvent) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
-    if (currentRoad) {
-      setCurrentRoad(prev => {
-        if (!prev) return null;
-        return {
-          points: [...prev.points, {x, y}],
-          color: prev.color
-        };
-      });
-    } else {
-      setCurrentRoad({
-        points: [{x, y}],
-        color: roadColor
-      });
-    }
-  };
-
   // Handle utility removal button
   const handleRemoveUtilityButton = () => {
     setIsRemovingUtility(true);
@@ -1416,16 +1386,6 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
     setScoutGroups(prevGroups => prevGroups.filter(group => group.id !== groupId));
   };
 
-  const handleAssignVillage = (groupId: number, villageIndex: number | null) => {
-    setScoutGroups(prevGroups => 
-      prevGroups.map(group => 
-        group.id === groupId 
-          ? {...group, assignedVillageIndex: villageIndex} 
-          : group
-      )
-    );
-  };
-
   // Check if a village meets the requirements for a scout group
   const checkVillageRequirements = (villageIndex: number, group: ScoutGroup): boolean => {
     const village = villages[villageIndex];
@@ -1461,14 +1421,152 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
     return Math.floor(village.area / 10); // 1 scout per 10 square meters
   };
 
-  // Tools list
-  const tools = [
-    { name: 'tent', label: 'Tent' },
-    { name: 'village', label: 'Village' },
-    { name: 'road', label: 'Road' },
-    { name: 'utility', label: 'Utility' },
-    { name: 'scoutGroup', label: 'Scout Group' },
-  ];
+  // Function to generate PDF using print
+  const handleExportPDF = () => {
+    setIsPdfGenerating(true);
+    
+    try {
+      // Store current body overflow style and scale
+      const originalOverflow = document.body.style.overflow;
+      const originalBodyBackground = document.body.style.background;
+      const originalScale = scale;
+      const originalPosition = { ...position };
+      
+      // Create a print-specific stylesheet
+      const style = document.createElement('style');
+      style.id = 'print-style';
+      style.innerHTML = `
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          .map-area {
+            visibility: visible;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            overflow: visible !important;
+            page-break-inside: avoid !important;
+          }
+          .map-area * {
+            visibility: visible !important;
+          }
+          .map-content {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            overflow: visible !important;
+          }
+          .map-wrapper {
+            position: absolute !important;
+            left: 50% !important;
+            top: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            max-width: 100% !important;
+            max-height: 100% !important;
+          }
+          .tent, .road, svg, .village, .utility {
+            visibility: visible !important;
+            display: block !important;
+            page-break-inside: avoid !important;
+            transform: translate(8px, 23px) !important;
+          }
+          .tent {
+            background-color: inherit !important;
+            border-color: inherit !important;
+            transform-origin: center !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          svg {
+            overflow: visible !important;
+          }
+          .map-title {
+            visibility: visible !important;
+            position: fixed !important;
+            top: 10px !important;
+            width: 100% !important;
+            text-align: center !important;
+            font-size: 18px !important;
+            font-weight: bold !important;
+            z-index: 9999 !important;
+          }
+          .map-footer {
+            visibility: visible !important;
+            position: fixed !important;
+            bottom: 10px !important;
+            width: 100% !important;
+            text-align: center !important;
+            font-size: 12px !important;
+            z-index: 9999 !important;
+          }
+          .tool-panel, .top-bar, .map-key-toggle {
+            display: none !important;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+      
+      // Add title and footer elements
+      const title = document.createElement('div');
+      title.className = 'map-title';
+      title.innerHTML = 'Scout Camp Map';
+      document.body.appendChild(title);
+      
+      const footer = document.createElement('div');
+      footer.className = 'map-footer';
+      footer.innerHTML = `Generated on: ${new Date().toLocaleDateString()}`;
+      document.body.appendChild(footer);
+      
+      // Temporarily adjust the map scale and position for better printing
+      setScale(1);
+      setPosition({ x: 0, y: 0 });
+      
+      // Modify body for printing
+      document.body.style.overflow = 'visible';
+      document.body.style.background = 'white';
+      
+      // Wait for the state updates to take effect
+      setTimeout(() => {
+        // Print the page
+        window.print();
+        
+        // Clean up after printing
+        setTimeout(() => {
+          // Remove print-specific styles and elements
+          const printStyle = document.getElementById('print-style');
+          if (printStyle) {
+            printStyle.remove();
+          }
+          
+          if (title) {
+            title.remove();
+          }
+          
+          if (footer) {
+            footer.remove();
+          }
+          
+          // Restore original styles and scale
+          document.body.style.overflow = originalOverflow;
+          document.body.style.background = originalBodyBackground;
+          setScale(originalScale);
+          setPosition(originalPosition);
+          
+          setIsPdfGenerating(false);
+        }, 1000);
+      }, 1000); // Longer timeout to ensure state updates are applied
+    } catch (error) {
+      console.error('Error printing map:', error);
+      alert('Failed to print map. Please try again.');
+      setIsPdfGenerating(false);
+    }
+  };
 
   return (
     <div className="map-maker-container">
@@ -2124,6 +2222,15 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
         <button className="back-button" onClick={onBack}>
           Back to Map Selection
         </button>
+
+        {/* Export PDF button */}
+        <button 
+          className="export-pdf-button"
+          onClick={handleExportPDF}
+          disabled={isPdfGenerating}
+        >
+          {isPdfGenerating ? 'Generating...' : 'Export PDF'}
+        </button>
       </div>
 
       {/* Right sidebar - Tools */}
@@ -2523,6 +2630,36 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
               
               {scoutGroups.length === 0 && (
                 <p className="no-items-message">No scout groups added yet</p>
+              )}
+            </div>
+          )}
+          
+          {/* PDF Export Tool */}
+          <div 
+            className={`tool-item ${activeToolName === 'pdf' ? 'active' : ''}`}
+            onClick={() => handleToolSelect('pdf')}
+          >
+            PDF Export
+          </div>
+          {activeToolName === 'pdf' && isToolExpanded && (
+            <div className="tool-options">
+              <div className="tool-option">
+                <p>Generate a PDF of your map with all elements included.</p>
+              </div>
+              
+              <button 
+                className="tool-button"
+                onClick={handleExportPDF}
+                disabled={isPdfGenerating}
+              >
+                {isPdfGenerating ? 'Generating...' : 'Export PDF'}
+              </button>
+              
+              {isPdfGenerating && (
+                <div className="pdf-loading-indicator">
+                  <div className="spinner"></div>
+                  <span>Generating PDF, please wait...</span>
+                </div>
               )}
             </div>
           )}
