@@ -676,31 +676,6 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
     return 0;
   };
 
-  // Calculate village perimeter (sum of all sides)
-  const calculateVillagePerimeter = (points: {x: number, y: number}[]): number => {
-    let perimeter = 0;
-    
-    // If no map scale is set, return 0
-    if (!mapScale) return 0;
-    
-    for (let i = 0; i < points.length; i++) {
-      const p1 = points[i];
-      const p2 = points[(i + 1) % points.length]; // Wrap around to the first point
-      
-      // Calculate distance between points in pixels
-      const distance = Math.sqrt(
-        Math.pow(p2.x - p1.x, 2) + 
-        Math.pow(p2.y - p1.y, 2)
-      );
-      
-      // Convert to meters using the map scale
-      const distanceInMeters = distance * mapScale;
-      perimeter += distanceInMeters;
-    }
-    
-    return perimeter;
-  };
-
   // Calculate how many scouts a village can accommodate
   const calculateScoutsCapacity = (areaInSquareMeters: number): { scoutGroups: number, scoutCapacity: number } => {
     // Each village gets a kitchen area of 21x13m = 273m²
@@ -1394,7 +1369,7 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
     // Check if the village has enough capacity for the scouts
     const assignedGroups = scoutGroups.filter(g => g.assignedVillageIndex === villageIndex && g.id !== group.id);
     const totalAssignedScouts = assignedGroups.reduce((sum, g) => sum + g.numberOfScouts, 0);
-    const villageCapacity = calculateVillageCapacity(village);
+    const villageCapacity = calculateScoutsCapacity(village.area).scoutCapacity;
     
     if (totalAssignedScouts + group.numberOfScouts > villageCapacity) {
       return false;
@@ -1413,12 +1388,6 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
     }
     
     return true;
-  };
-
-  // Calculate village capacity based on area
-  const calculateVillageCapacity = (village: Village): number => {
-    // This is a simple calculation, can be adjusted based on requirements
-    return Math.floor(village.area / 10); // 1 scout per 10 square meters
   };
 
   // Function to generate PDF using print
@@ -1990,7 +1959,7 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
                 )}
                 
                 {/* Display area or perimeter based on display mode */}
-                {(villageDisplayMode === 'area' || villageDisplayMode === 'distances' || villageDisplayMode === 'scouts') && (
+                {(villageDisplayMode === 'area' || villageDisplayMode === 'scouts') && (
                   <text
                     x={village.points.reduce((sum, p) => sum + p.x, 0) / village.points.length}
                     y={village.points.reduce((sum, p) => sum + p.y, 0) / village.points.length}
@@ -2001,7 +1970,6 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
                     fontWeight="bold"
                   >
                     {villageDisplayMode === 'area' ? `${Math.round(village.area)} m²` : 
-                     villageDisplayMode === 'distances' ? `${Math.round(calculateVillagePerimeter(village.points))} m` : 
                      villageDisplayMode === 'scouts' ? `${calculateScoutsCapacity(village.area).scoutCapacity} scouts` : ''}
                   </text>
                 )}
@@ -2077,18 +2045,21 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
                   </text>
                 )}
                 
-                {/* Display area or perimeter based on display mode */}
+                {/* Display area or scouts for current village */}
                 {(villageDisplayMode === 'area' || villageDisplayMode === 'scouts') && (
                   <text
                     x={currentVillage.points.reduce((sum, p) => sum + p.x, 0) / currentVillage.points.length}
                     y={currentVillage.points.reduce((sum, p) => sum + p.y, 0) / currentVillage.points.length}
                     textAnchor="middle"
-                    dominantBaseline="middle"
-                    fill="#000"
-                    fontSize="12"
-                    fontWeight="bold"
+                    fill="black"
+                    fontSize="14"
+                    style={{
+                      backgroundColor: 'white',
+                      padding: '2px',
+                      userSelect: 'none'
+                    }}
                   >
-                    {villageDisplayMode === 'area' ? `${calculatePolygonArea(currentVillage.points)} m²` : 
+                    {villageDisplayMode === 'area' ? `${Math.round(calculatePolygonArea(currentVillage.points))} m²` : 
                      villageDisplayMode === 'scouts' ? `${calculateScoutsCapacity(calculatePolygonArea(currentVillage.points)).scoutCapacity} scouts` : ''}
                   </text>
                 )}
@@ -2758,7 +2729,7 @@ function MapMaker({ mapUrl, onBack }: MapMakerProps) {
                   {villages.map((village, index) => {
                     const meetsRequirements = checkVillageRequirements(index, currentScoutGroup);
                     const isAssigned = currentScoutGroup.assignedVillageIndex === index;
-                    const villageCapacity = calculateVillageCapacity(village);
+                    const villageCapacity = calculateScoutsCapacity(village.area).scoutCapacity;
                     const assignedGroups = scoutGroups.filter(g => g.assignedVillageIndex === index && g.id !== currentScoutGroup.id);
                     const totalAssignedScouts = assignedGroups.reduce((sum, g) => sum + g.numberOfScouts, 0);
                     const remainingCapacity = villageCapacity - totalAssignedScouts;
